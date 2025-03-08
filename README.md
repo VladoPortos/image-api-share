@@ -22,6 +22,8 @@ A lightweight, fast image sharing API service with Docker support. This API prov
 - Environment variable configuration
 - Supports all image formats
 - N8N compatible for automation workflows
+- Returns original filenames for easy image identification
+- Bulk deletion via wipe-all endpoint
 
 ## Pre-built Docker Image
 
@@ -50,6 +52,21 @@ docker run -d \
 - `PUT /images`: Upload an image (requires API key)
 - `GET /images/{filename}`: Retrieve an image
 - `DELETE /images/{filename}`: Delete an image (requires API key)
+- `DELETE /wipe-all`: Delete all images (requires API key)
+
+## API Response Format
+
+When uploading an image, the API returns a JSON response with:
+
+```json
+{
+  "image_id": "unique-uuid-for-the-image",
+  "download_url": "http://your-server/images/filename.jpg",
+  "original_filename": "your-original-filename.jpg"
+}
+```
+
+The `original_filename` field contains the original filename of the uploaded image, making it easier to identify images in your automation workflows.
 
 ## Environment Variables
 
@@ -65,6 +82,7 @@ To upload images from N8N to this API:
    - URL: `http://your-server/images`
    - Headers:
      - `api-key`: Your API key
+     - `x-filename`: (Optional) Set this to pass your original filename
    - Binary Data: Enabled
    - When using binary data from previous nodes:
      - Use "Send Binary Data" option
@@ -74,7 +92,16 @@ To upload images from N8N to this API:
    - Traditional multipart/form-data uploads (using `file` parameter)
    - Direct binary data uploads (send the binary data directly in the request body)
 
-3. Sample N8N workflow for binary data:
+3. The response will include the original filename, which you can use in subsequent nodes:
+   ```json
+   {
+     "image_id": "3f7c53e4-96bc-4d0f-b7c2-351a5def54e8",
+     "download_url": "http://your-server/images/3f7c53e4-96bc-4d0f-b7c2-351a5def54e8.jpg",
+     "original_filename": "vacation-photo.jpg"
+   }
+   ```
+
+4. Sample N8N workflow for binary data:
    ```json
    {
      "nodes": [
@@ -90,6 +117,10 @@ To upload images from N8N to this API:
                {
                  "name": "api-key",
                  "value": "your-secret-api-key"
+               },
+               {
+                 "name": "x-filename",
+                 "value": "={{ $json.filename }}"
                }
              ]
            },
@@ -148,6 +179,15 @@ curl -X PUT \
   -F "file=@/path/to/your/image.jpg"
 ```
 
+Response:
+```json
+{
+  "image_id": "3f7c53e4-96bc-4d0f-b7c2-351a5def54e8",
+  "download_url": "http://localhost/images/3f7c53e4-96bc-4d0f-b7c2-351a5def54e8.jpg",
+  "original_filename": "your-image.jpg"
+}
+```
+
 ### Get an Image
 
 ```bash
@@ -160,6 +200,22 @@ curl -X GET http://localhost/images/filename.jpg
 curl -X DELETE \
   http://localhost/images/filename.jpg \
   -H "api-key: your-secret-api-key"
+```
+
+### Wipe All Images
+
+```bash
+curl -X DELETE \
+  http://localhost/wipe-all \
+  -H "api-key: your-secret-api-key"
+```
+
+Response:
+```json
+{
+  "message": "All images wiped successfully",
+  "deleted_count": 42
+}
 ```
 
 ## Security Notes
