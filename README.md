@@ -1,5 +1,17 @@
 # Image Share API
 
+---
+
+## ☕ Buy Me a Coffee (or a Beer!)
+
+If you like this project and want to support my caffeine-fueled coding sessions, you can buy me a coffee (or a beer, I won't judge! 🍻) on Ko-fi:
+
+[![Support me on Ko-fi](img/support_me_on_kofi_badge_red.png)](https://ko-fi.com/vladoportos)
+
+Every donation helps to prove to my wife that I'm not a complete idiot :D
+
+---
+
 A lightweight, fast image sharing API service with Docker support. This API provides endpoints to upload, retrieve, and delete images with API key authentication.
 
 ## Features
@@ -9,6 +21,28 @@ A lightweight, fast image sharing API service with Docker support. This API prov
 - Docker containerized for easy deployment
 - Environment variable configuration
 - Supports all image formats
+- N8N compatible for automation workflows
+
+## Pre-built Docker Image
+
+You can find a pre-built Docker image ready to use at:
+
+```
+vladoportos/image-api-share
+```
+
+To pull and run the pre-built image:
+
+```bash
+docker pull vladoportos/image-api-share
+docker run -d \
+  -p 80:80 \
+  -e API_KEY="your-secret-api-key" \
+  -e BASE_URL="https://your-domain.com" \
+  -v image-data:/app/uploads \
+  --name image-share \
+  vladoportos/image-api-share
+```
 
 ## API Endpoints
 
@@ -22,12 +56,58 @@ A lightweight, fast image sharing API service with Docker support. This API prov
 - `API_KEY`: Required. Authentication key for upload and delete operations
 - `BASE_URL`: Optional. Base URL for returned image links (defaults to http://localhost)
 
+## Using with N8N
+
+To upload images from N8N to this API:
+
+1. Use an **HTTP Request** node with the following settings:
+   - Method: `PUT`
+   - URL: `http://your-server/images`
+   - Headers:
+     - `api-key`: Your API key
+   - Binary Data: Enabled
+   - When using binary data from previous nodes:
+     - Use "Send Binary Data" option
+     - Set "Property Name" to match your binary data field (usually "data")
+
+2. **Important**: The API now supports both:
+   - Traditional multipart/form-data uploads (using `file` parameter)
+   - Direct binary data uploads (send the binary data directly in the request body)
+
+3. Sample N8N workflow for binary data:
+   ```json
+   {
+     "nodes": [
+       {
+         "name": "HTTP Request",
+         "type": "n8n-nodes-base.httpRequest",
+         "parameters": {
+           "method": "PUT",
+           "url": "http://your-server/images",
+           "authentication": "headerAuth",
+           "headerParameters": {
+             "parameters": [
+               {
+                 "name": "api-key",
+                 "value": "your-secret-api-key"
+               }
+             ]
+           },
+           "sendBinaryData": true,
+           "binaryPropertyName": "data",
+           "options": {}
+         }
+       }
+     ]
+   }
+   ```
+
 ## Docker Setup
 
 ### Build the Docker Image
 
 ```bash
-docker build -t image-share-api .
+docker build -t image-api-share .
 ```
 
 ### Run the Container
@@ -86,4 +166,3 @@ curl -X DELETE \
 
 - Always use a strong, randomly generated API key
 - When deployed, use HTTPS through a reverse proxy
-

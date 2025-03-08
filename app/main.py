@@ -2,7 +2,7 @@ import os
 import uuid
 import shutil
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Response
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Response, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -35,25 +35,61 @@ async def root():
 
 @app.put("/images", response_model=ImageResponse)
 async def upload_image(
-    file: UploadFile = File(...),
+    request: Request,
+    file: Optional[UploadFile] = File(None),
     api_key: str = Header(...)
 ):
     validate_api_key(api_key)
     
-    # Validate file is an image
-    content_type = file.content_type
-    if not content_type or not content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File must be an image")
-    
-    # Generate unique ID and determine file extension
+    # Generate unique ID for the file
     image_id = str(uuid.uuid4())
-    file_extension = os.path.splitext(file.filename)[1] if file.filename else ""
-    filename = f"{image_id}{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, filename)
     
-    # Save the file
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # Handle direct binary upload from N8N or similar tools
+    if not file:
+        # Get content type from headers (fallback to application/octet-stream)
+        content_type = request.headers.get("content-type", "application/octet-stream")
+        
+        # Check if it appears to be an image
+        if not content_type.startswith('image/'):
+            # Try to detect from file extension if provided in the filename header
+            filename = request.headers.get("x-filename", "")
+            if not filename or not any(filename.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff']):
+                content_type = "image/jpeg"  # Default to jpeg if we can't determine
+        
+        # Get file extension from content type or default to .bin
+        file_extension = "." + (content_type.split("/")[1] if "/" in content_type else "bin")
+        
+        # Read the raw binary data
+        body = await request.body()
+        if not body:
+            raise HTTPException(status_code=400, detail="No file content provided")
+        
+        # Create filename and save
+        filename = f"{image_id}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        
+        # Save the binary data
+        with open(file_path, "wb") as buffer:
+            buffer.write(body)
+    else:
+        # Handle regular multipart/form-data upload
+        # Validate file is an image
+        content_type = file.content_type
+        if not content_type or not content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        # Get the file extension
+        file_extension = os.path.splitext(file.filename)[1] if file.filename else ""
+        if not file_extension:
+            # Try to get extension from content type
+            file_extension = "." + (content_type.split("/")[1] if "/" in content_type else "bin")
+        
+        filename = f"{image_id}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
     
     # Return the download URL
     download_url = f"{BASE_URL}/images/{filename}"
